@@ -13,6 +13,24 @@ from REIP.prediction.Prediction import prediction
 import os
 import cv2
 
+@st.cache(allow_output_mutation=True)
+def auto_load(methods):
+    ml = eval(methods)
+    return ml
+
+#@st.cache(allow_output_mutation=True)
+#def originimage(imagename):
+    """
+    originimage(filepath)
+    """
+#    origin_img = cv2.imread(imagename)
+#    return origin_img
+
+@st.cache(allow_output_mutation=True)
+def resultimage(imagearray, model):
+    result_img = model(imagearray)
+    return result_img
+
 from PIL import Image
 from REIP.image_processing.restore_blur import img_processing, edsr, espcn, fsrcnn, lapsrn, uint_to_float, enhance_details, restore_again, blur_function_selection
 #parameter settting
@@ -21,8 +39,9 @@ blur_description = ['Sharpen the edge area with automatically modifying contrast
                     'Sharpen the edge area', 'less memory needed, slow but thoroughly restoration', 
                     'Fast but roughly restoration', 'Similar to ESPCN, fast with roughly restoration', 
                     'Medium time consuming and medium restoration']
-blur_list = pd.DataFrame({'method':blur_method[1:],'Description':blur_description})
-blur_list.set_index('method')
+blur_list = pd.DataFrame({'method':blur_method[1:]})
+blur_list_descrip = pd.DataFrame({'method':blur_method[1:],'Description':blur_description})
+blur_list_descrip = blur_list_descrip.set_index('method')
 ##########
 st.title('DIRECT Project')
 
@@ -74,14 +93,18 @@ if input_data is not None:
         classified_image = prediction[1]
         st.header(classified_class)
         #os.remove(temp+input_data.name)
-
+        
         if classified_class == 'It is predicted to be surface charge.':
             gray_level = st.sidebar.slider('Surface charge remove level', -10, 30, 9)
             st.subheader('Select the surface area')
-            canvas_result = st_canvas(height = 300, width = 300, fill_color = 0 , 
+            canvas_result = st_canvas(height = prediction[2].shape[0], width = prediction[2].shape[1], fill_color = 0 , 
                                           drawing_mode = 'rect', 
-                                          stroke_width = 3, 
-                                          background_image = from3d_array_image(classified_image))
+                                          stroke_width = 2, 
+                                          background_image = from3d_array_image(prediction[2]))
+            #canvas_result = st_canvas(fill_color = 0, 
+                                          #drawing_mode = 'rect', 
+                                          #stroke_width = 2, 
+                                          #background_image = from3d_array_image(resize_array))
             if canvas_result.json_data is not None:  
                 objects = pd.json_normalize(canvas_result.json_data["objects"])
                 for col in objects.select_dtypes(include = ['object']).columns:
@@ -90,14 +113,13 @@ if input_data is not None:
                 for i in range(len(objects)):
                     start_point = [objects['left'][i],objects['top'][i]] 
                     end_point = [objects['left'][i]+objects['width'][i], objects['top'][i]+objects['height'][i]]
-                    df_image = convert_to_dfimage(from3d_array_image(prediction[1]))
+                    df_image = convert_to_dfimage(from3d_array_image(prediction[2]))
                     df_copied = adjust_gray_value(df_image, start_point, end_point, level = gray_level)
                     after_sc_image = show_edited_image(df_copied)
                     RGBarray = convert_to_RGB3darray(after_sc_image)
                     st.subheader('After surface charge restoration')
                     st.image(after_sc_image)
-
-                    Answer= st.radio('Further improve blur?', options=['Click here to select', 'Remain','Restore Blur'], index=0)
+                    Answer= st.selectbox('Further improve blur?', options=['Click here to select', 'Remain','Restore Blur'], index=0)
                     if Answer == 'Restore Blur':
                         methods= st.selectbox('Choose blur restoration method', options=blur_list, index=0)
                         if methods != 'Click here select method':
@@ -106,19 +128,21 @@ if input_data is not None:
                             result_array = ml((RGBarray))
                             result_array_copied = result_array.copy()
                             after_sc_image = PIL.Image.fromarray(result_array_copied)
-                            st.image(after_sc_image)
-                            result_2img = cv2.resize(result_array_copied,(1280, 890))
-                            image = PIL.Image.fromarray(result_2img)
-                            remain_output = image.save(temp+input_data.name)
+                            
+                            #result_2img = cv2.resize(result_array_copied,(1280, 890))
+                            #image = PIL.Image.fromarray(result_2img)
+                            result_2img = cv2.resize(RGBarray, (1280,960))
+                            st.image(result_2img)
+                            remain_output = PIL.Image.fromarray(result_2img).save(temp+input_data.name)
                             with open(os.path.join(temp,input_data.name),'rb') as f:
                                 btn = st.download_button(label="Download edited image", data=f, file_name=input_data.name, mime="image/tif")
                             os.remove(temp+input_data.name)
                     if Answer == 'Remain':
 
-                        #remain_output = PIL.Image.open(temp+input_data.name)
-                        result_2img = cv2.resize(RGBarray,(1280, 890))
-                        image = PIL.Image.fromarray(result_2img)
-                        remain_output = image.save(temp+input_data.name)
+                       
+                        #result_2img = cv2.resize(RGBarray,(1280, 890))
+                        result_2img = cv2.resize(RGBarray, (1280,960))
+                        remain_output = PIL.Image.fromarray(result_2img).save(temp+input_data.name)
                         with open(os.path.join(temp,input_data.name),'rb') as f:
                             btn = st.download_button(label="Download edited image", data=f, file_name=input_data.name, mime="image/tif")
                         os.remove(temp+input_data.name)
@@ -126,20 +150,25 @@ if input_data is not None:
 
         elif prediction[0] == 'It is predicted to be blur.':
             st.text('Here is the list of feature in image proessing')
-            st.table(blur_list)
+            st.table(blur_list_descrip)
 
             methods= st.selectbox('Choose the 1st restoration method', options=blur_list, index=0)
-            ml = eval(methods)
-            result_img = ml((prediction[1]))
-            st.image(result_img)
+            #@st.cache(allow_output_mutation=True)
+            #def auto_load(array_image, methods)
+                #ml = eval(methods)
+                #return ml
+            #result_img = auto_load(methods)((classified_image)) 
+            
+            result_img = resultimage(classified_image, auto_load(methods))
+            st.image(from3d_array_image(result_img))
             Answer= st.selectbox('Would you want to restore again', options=['Default','Yes','No'], index=0)
             if Answer == 'Yes':
-                methods2= st.selectbox('Choose the restoration method', options=blur_list, index=0)
+                methods2= st.selectbox('Choose the restoration method (edsr is time-consuming)', options=blur_list, index=0)
                 ml2 = eval(methods2)
                 result_2img = ml2((result_img))
                 st.image(result_2img)
                 st.header('you are all set!')
-                result_2img = cv2.resize(result_2img, (1280,890))
+                result_2img = cv2.resize(result_2img, (1280,960))
                 image = PIL.Image.fromarray(result_2img)
                 remain_output = image.save(temp+input_data.name)
                 with open(os.path.join(temp,input_data.name),'rb') as f:
@@ -147,7 +176,7 @@ if input_data is not None:
                 os.remove(temp+input_data.name)
                 
             elif Answer == 'No':
-                result_2img = cv2.resize(result_img, (1280,890))
+                result_2img = cv2.resize(result_img, (1280,960))
                 image = PIL.Image.fromarray(result_2img)
                 remain_output = image.save(temp+input_data.name)
                 with open(os.path.join(temp,input_data.name),'rb') as f:

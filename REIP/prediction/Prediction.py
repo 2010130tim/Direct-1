@@ -20,11 +20,11 @@ def prediction(image_folder_path): # ex : '/gdrive/My Drive/REIP/imagedata/clear
     '''This prediction function take input picture file and return the predicted class'''
     reip_dict = {0:'clear', 1:'blur', 2:'surface charge'}
     image = tf.keras.preprocessing.image.load_img(image_folder_path)
-    noresize2 = cv2.resize(np.array(image),(240,320))
+    noresizekim = np.array(image)
     noresize = cv2.resize(np.array(image)[0:890, :],(300,300))
     np_image = noresize.astype('float32')/255
     input_arr = np.array([np_image])  # Convert single image to a batch.
     predictions = model(input_arr)
     predict = reip_dict.get(np.argmax(predictions[0]))
     pre_string = f'It is predicted to be {predict}.'
-    return [pre_string,noresize2]
+    return [pre_string,noresizekim,noresize]
